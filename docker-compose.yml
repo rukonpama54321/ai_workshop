@@ -1,0 +1,39 @@
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: medclaim
+      POSTGRES_PASSWORD: medclaim
+      POSTGRES_DB: medclaim
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+
+  api:
+    build: ./backend
+    ports:
+      - "8000:8000"
+    environment:
+      DATABASE_URL: postgresql://medclaim:medclaim@db:5432/medclaim
+      REDIS_URL: redis://redis:6379/0
+      LLM_BASE_URL: http://host.docker.internal:11434
+      SAP_USE_MOCK: "true"
+      UPLOAD_DIR: /app/uploads
+    volumes:
+      - ./backend/app:/app/app
+      - uploads:/app/uploads
+    depends_on:
+      - db
+      - redis
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+volumes:
+  pgdata:
+  uploads:

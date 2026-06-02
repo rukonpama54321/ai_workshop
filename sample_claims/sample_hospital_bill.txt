@@ -1,0 +1,16 @@
+Sample hospital bill for workshop training.
+
+Hospital Bill — GNRC Hospitals, Guwahati
+Admission Date: 10-05-2026
+Discharge Date: 12-05-2026
+
+Room charge: Rs. 6000 per day x 2 days = Rs. 12000
+Corporate discount claimed: 8.5%
+
+Medicines:
+Paracetamol - Rs. 120
+Sugar testing kit - Rs. 500
+
+Total Bill Amount: Rs. 12620
+
+Diagnosis: Viral fever
