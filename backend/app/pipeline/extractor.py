@@ -82,31 +82,65 @@ def _regex_fallback(text: str) -> dict[str, Any]:
     }
 
 
-async def _llm_extract(text: str) -> dict[str, Any] | None:
-    prompt = f"""Extract medical claim fields from this document text as JSON only.
+_EXTRACTION_PROMPT = """Extract medical claim fields from this document text as JSON only.
 Use null for missing values. Never invent amounts.
 Fields: claim_type (inpatient/outpatient), hospital_name, invoice_date (YYYY-MM-DD),
 prescription_date, discharge_date, room_charge_per_day, room_days, discount_claimed_pct,
 diagnosis, line_items (array of category, description, amount), medicines (array of name, amount).
 
 Document:
-{text[:8000]}
+{text}
 """
+
+
+def _parse_json_object(raw: str) -> dict[str, Any] | None:
+    start = raw.find("{")
+    end = raw.rfind("}") + 1
+    if start >= 0 and end > start:
+        try:
+            return json.loads(raw[start:end])
+        except json.JSONDecodeError:
+            return None
+    return None
+
+
+async def _ollama_extract(prompt: str) -> dict[str, Any] | None:
+    async with httpx.AsyncClient(timeout=120.0) as client:
+        resp = await client.post(
+            f"{settings.llm_base_url}/api/generate",
+            json={"model": settings.llm_model, "prompt": prompt, "stream": False},
+        )
+        resp.raise_for_status()
+        return _parse_json_object(resp.json().get("response", ""))
+
+
+async def _groq_extract(prompt: str) -> dict[str, Any] | None:
+    if not settings.llm_api_key:
+        return None
+    async with httpx.AsyncClient(timeout=120.0) as client:
+        resp = await client.post(
+            f"{settings.groq_base_url}/chat/completions",
+            headers={"Authorization": f"Bearer {settings.llm_api_key}"},
+            json={
+                "model": settings.groq_model,
+                "messages": [{"role": "user", "content": prompt}],
+                "temperature": 0,
+                "response_format": {"type": "json_object"},
+            },
+        )
+        resp.raise_for_status()
+        content = resp.json()["choices"][0]["message"]["content"]
+        return _parse_json_object(content)
+
+
+async def _llm_extract(text: str) -> dict[str, Any] | None:
+    prompt = _EXTRACTION_PROMPT.format(text=text[:8000])
     try:
-        async with httpx.AsyncClient(timeout=120.0) as client:
-            resp = await client.post(
-                f"{settings.llm_base_url}/api/generate",
-                json={"model": settings.llm_model, "prompt": prompt, "stream": False},
-            )
-            resp.raise_for_status()
-            raw = resp.json().get("response", "")
-            start = raw.find("{")
-            end = raw.rfind("}") + 1
-            if start >= 0 and end > start:
-                return json.loads(raw[start:end])
+        if settings.llm_provider == "groq":
+            return await _groq_extract(prompt)
+        return await _ollama_extract(prompt)
     except Exception:
         return None
-    return None
 
 
 async def extract_entities(text: str) -> ExtractedClaimData:
@@ -116,6 +150,9 @@ async def extract_entities(text: str) -> ExtractedClaimData:
         method = "regex_fallback"
     else:
         method = "ollama"
+
+    if method == "ollama" and settings.llm_provider == "groq":
+        method = "groq"
 
     low_conf = list(data.get("low_confidence_fields") or [])
     if method == "regex_fallback":
@@ -138,4 +175,4 @@ async def extract_entities(text: str) -> ExtractedClaimData:
 
 
 def extraction_method_label() -> str:
-    return "ollama+regex"
+    return f"{settings.llm_provider}+regex"

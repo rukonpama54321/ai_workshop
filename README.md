@@ -47,22 +47,43 @@ Open http://127.0.0.1:5173
 
 `ModuleNotFoundError: No module named 'app'` — you ran uvicorn from the **project root**. Use `.\run-backend.ps1` or `cd backend` first.
 
-### 4. Ollama (optional)
+### 4. LLM provider
 
-If Ollama is running locally, extraction uses your model. Set in `.env`:
+Two options, switched by `LLM_PROVIDER` in `.env` (defaults to `ollama`):
 
 ```
+# Local / self-hosted (keeps data on your machine):
+LLM_PROVIDER=ollama
 LLM_BASE_URL=http://localhost:11434
 LLM_MODEL=llama3.2
+
+# Free hosted (best for cloud demo — Ollama can't run on free tiers):
+LLM_PROVIDER=groq
+LLM_API_KEY=gsk_...            # from https://console.groq.com
+GROQ_MODEL=llama-3.3-70b-versatile
 ```
 
-Without Tesseract, image uploads use **EasyOCR** (first run downloads ~100MB models).
+Either way, regex fallback runs if the LLM is unavailable.
+
+### 5. OCR
+
+Image uploads use **Tesseract** if installed. For local handwriting fallback you can also install EasyOCR (PyTorch, ~2GB — left out of the deploy image):
 
 ```powershell
-pip install -r requirements.txt
+pip install -r requirements-optional.txt
 ```
 
-Optional faster OCR — install [Tesseract for Windows](https://github.com/UB-Mannheim/tesseract/wiki) and add to PATH.
+Optional faster OCR on Windows — install [Tesseract for Windows](https://github.com/UB-Mannheim/tesseract/wiki) and add to PATH.
+
+### 6. Email notifications (optional)
+
+```
+EMAIL_PROVIDER=resend
+RESEND_API_KEY=re_...          # from https://resend.com (free tier)
+EMAIL_FROM=onboarding@resend.dev
+```
+
+Defaults to `none` (no emails sent). Sends are failure-tolerant — a send error never blocks a claim.
 
 ## Demo accounts
 
@@ -104,6 +125,34 @@ pytest tests/ -v
 
 `SAP_USE_MOCK=true` — no real RFC required. Optional FM contract documented in plan.
 
-## Not in scope
+## Free demo deployment
 
-Production deployment, real PII, internal SMTP, real SAP RFC.
+Everything below uses free tiers. **Sample/fake data only — not for real PII.**
+
+| Layer | Service | Notes |
+|-------|---------|-------|
+| Backend (FastAPI) | Render (Docker) | `render.yaml` blueprint included. Free web service + free Postgres. |
+| LLM | Groq | `LLM_PROVIDER=groq` + `LLM_API_KEY`. Free, hosted Llama. |
+| Email | Resend | `EMAIL_PROVIDER=resend` + `RESEND_API_KEY`. Free tier. |
+| Frontend (React) | Vercel | `frontend/vercel.json` proxies `/api/*` to the backend. |
+
+**Backend (Render):**
+1. Push this repo to GitHub.
+2. Render → New → Blueprint → select the repo (uses `render.yaml`).
+3. Fill the dashboard secrets: `LLM_API_KEY`, `RESEND_API_KEY`, and `FRONTEND_URL` (your Vercel URL).
+4. Deploy. Note the app URL, e.g. `https://medclaim-api.onrender.com`.
+
+**Frontend (Vercel):**
+1. Edit `frontend/vercel.json` → set the rewrite `destination` to your Render URL.
+2. Vercel → New Project → import repo → root directory `frontend`.
+3. Deploy. The `/api/*` rewrite proxies to the backend (no CORS setup needed).
+
+> Render free web services sleep after ~15 min idle (first request cold-starts in ~30–50s). Fine for a demo. EasyOCR is excluded from the deploy image to stay within free limits — use Tesseract or `.txt`/`.pdf` samples there.
+
+## Production (PRD) — different stack
+
+For real PII, do **not** use the free tiers above. Run the Docker Compose stack on a controlled VM (on-prem or your cloud region), keep **Ollama + Tesseract self-hosted** (data stays in-network), add Celery+Redis for async, internal SMTP, HTTPS/nginx, DB backups, SSO, and audit logging.
+
+## Not in scope (workshop)
+
+Real PII, real SAP RFC, SSO, audit logging — see PRD notes above.

@@ -1,0 +1,3 @@
+# Optional heavy OCR fallback (PyTorch-based). Only needed for local image/
+# handwriting OCR when Tesseract is not installed. Not used in the deploy image.
+easyocr==1.7.2

@@ -15,4 +15,6 @@ pypdf==5.1.0
 pillow==11.0.0
 pytesseract==0.3.13
 pdf2image==1.17.0
-easyocr==1.7.2
+# EasyOCR (PyTorch, ~2GB) is optional and loaded lazily. For local handwriting/
+# image OCR without Tesseract, install it separately: pip install -r requirements-optional.txt
+# Left out of the default/deploy image to stay within free-tier size & memory limits.

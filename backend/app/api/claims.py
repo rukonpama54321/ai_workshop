@@ -13,6 +13,7 @@ from app.database import get_db
 from app.models import Claim, ClaimDocument, ClaimStatus, Feedback, User, UserRole
 from app.pipeline.processor import process_claim
 from app.schemas import ClaimDetail, ClaimSummary, ReviewAction
+from app.services.email import notify_claim_reviewed, notify_claim_submitted
 
 router = APIRouter(prefix="/claims", tags=["claims"])
 
@@ -144,6 +145,7 @@ async def create_claim(
     db.refresh(claim)
     claim = await process_claim(db, claim, upload_root)
     claim.user = user
+    notify_claim_submitted(user.email, user.full_name, claim.id)
     return _claim_to_summary(claim)
 
 
@@ -183,6 +185,10 @@ def review_claim(
 
     db.commit()
     db.refresh(claim)
+    if claim.user:
+        notify_claim_reviewed(
+            claim.user.email, claim.user.full_name, claim.id, action.action, action.comment
+        )
     return ClaimDetail(
         **_claim_to_summary(claim).model_dump(),
         summary_json=claim.summary_json,
