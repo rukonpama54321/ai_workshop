@@ -25,40 +25,60 @@ def _parse_date(value: str | None) -> date | None:
 
 
 def _regex_fallback(text: str) -> dict[str, Any]:
-    amount_match = re.search(r"(?:total|amount|bill)[:\s]*₹?\s*([\d,]+(?:\.\d+)?)", text, re.I)
+    amount_match = re.search(
+        r"(?:total due|total|amount|bill)[:\s]*₹?\s*([\d,]+(?:\.\d+)?)", text, re.I
+    )
     hospital_match = re.search(
-        r"(?:hospital|clinic|medical centre|medical center)[:\s]*([A-Za-z0-9\s&.-]+)",
+        r"(?:hospital|clinic|medical centre|medical center|associates)[:\s]*([A-Za-z0-9\s&.'-]+)",
         text,
         re.I,
     )
+    provider_match = re.search(
+        r"^([A-Za-z0-9\s&.'-]+(?:Associates|Hospital|Clinic|Medical|Health))",
+        text,
+        re.I | re.M,
+    )
     discount_match = re.search(r"discount[:\s]*([\d.]+)\s*%", text, re.I)
     room_match = re.search(r"room[:\s]*₹?\s*([\d,]+(?:\.\d+)?)", text, re.I)
+    icd_match = re.search(r"\b([A-Z]\d{2}(?:\.\d+)?)\b", text)
 
     medicines = []
     for m in re.finditer(r"(paracetamol|amoxicillin|metformin|azithromycin|crocin|P500)", text, re.I):
         medicines.append({"name": m.group(1).lower(), "amount": 0})
 
+    hospital_name = None
+    if hospital_match:
+        hospital_name = hospital_match.group(1).strip()[:120]
+    elif provider_match:
+        hospital_name = provider_match.group(1).strip()[:120]
+    else:
+        first_line = text.strip().split("\n")[0] if text.strip() else ""
+        if re.search(r"associates|hospital|clinic|medical", first_line, re.I):
+            hospital_name = first_line.strip()[:120]
+
+    line_items = []
+    if amount_match:
+        line_items.append(
+            {
+                "category": "other",
+                "description": "Extracted bill total",
+                "amount": float(amount_match.group(1).replace(",", "")),
+            }
+        )
+
     return {
-        "claim_type": "inpatient" if "admission" in text.lower() or "discharge" in text.lower() else "outpatient",
-        "hospital_name": hospital_match.group(1).strip()[:120] if hospital_match else None,
+        "claim_type": "inpatient" if re.search(r"admission|discharge|in hosp\?\s*y", text, re.I) else "outpatient",
+        "hospital_name": hospital_name,
         "invoice_date": None,
         "prescription_date": None,
         "discharge_date": None,
         "room_charge_per_day": float(room_match.group(1).replace(",", "")) if room_match else None,
         "room_days": 1 if room_match else None,
         "discount_claimed_pct": float(discount_match.group(1)) if discount_match else None,
-        "line_items": [
-            {
-                "category": "other",
-                "description": "Extracted bill total",
-                "amount": float(amount_match.group(1).replace(",", "")) if amount_match else 0,
-            }
-        ]
-        if amount_match
-        else [],
+        "line_items": line_items,
         "medicines": medicines,
-        "diagnosis": None,
-        "low_confidence_fields": ["invoice_date"] if not amount_match else [],
+        "diagnosis": icd_match.group(1) if icd_match else None,
+        "low_confidence_fields": [] if amount_match else ["invoice_date", "total_amount"],
     }
 
 

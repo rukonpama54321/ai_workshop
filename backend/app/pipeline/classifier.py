@@ -18,7 +18,7 @@ def classify_document(text: str) -> tuple[str, float]:
     lower = text.lower()
     rules: list[tuple[str, list[str]]] = [
         ("discharge_summary", ["discharge summary", "discharge note"]),
-        ("hospital_bill", ["hospital bill", "ip bill", "inpatient bill", "room charge"]),
+        ("hospital_bill", ["hospital bill", "ip bill", "inpatient bill", "room charge", "tax invoice", "statement / tax invoice"]),
         ("pharmacy_invoice", ["pharmacy", "chemist", "medicine bill"]),
         ("lab_report", ["lab report", "pathology", "diagnostic"]),
         ("prescription", ["prescription", "rx", " prescribed "]),

@@ -14,8 +14,9 @@ class Settings(BaseSettings):
     access_token_expire_minutes: int = 480
 
     upload_dir: str = "uploads"
-    llm_base_url: str = "http://host.docker.internal:11434"
+    llm_base_url: str = "http://localhost:11434"
     llm_model: str = "llama3.2"
+    llm_vision_model: str = "llama3.2-vision"
     sap_use_mock: bool = True
 
     ocr_confidence_threshold: float = 0.65

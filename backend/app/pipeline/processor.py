@@ -8,7 +8,7 @@ from app.models import Claim, ClaimDocument, ClaimLineItem, ClaimStatus, Extract
 from app.pipeline.claim_validator import validate_claim
 from app.pipeline.classifier import classify_document
 from app.pipeline.extractor import extract_entities
-from app.pipeline.ingest import extract_text_from_file
+from app.pipeline.ingest import extract_text_from_file_with_meta
 
 
 async def process_claim(db: Session, claim: Claim, upload_dir: Path) -> Claim:
@@ -22,7 +22,8 @@ async def process_claim(db: Session, claim: Claim, upload_dir: Path) -> Claim:
 
     combined_text = ""
     for doc in claim.documents:
-        text = extract_text_from_file(upload_dir / doc.storage_path)
+        file_path = upload_dir / doc.storage_path
+        text, ocr_method, ocr_error = extract_text_from_file_with_meta(file_path)
         doc_type, confidence = classify_document(text)
         doc.doc_type = doc_type
         combined_text += f"\n--- {doc.filename} ---\n{text}\n"
@@ -38,8 +39,34 @@ async def process_claim(db: Session, claim: Claim, upload_dir: Path) -> Claim:
                 review_required=confidence < 0.7,
             )
         )
+        db.add(
+            ExtractionField(
+                claim_id=claim.id,
+                field_name=f"ocr:{doc.filename}",
+                value=text[:500] if text else None,
+                confidence=0.9 if text else None,
+                page_num=1,
+                method=ocr_method,
+                review_required=not bool(text.strip()),
+            )
+        )
+        if ocr_error:
+            db.add(
+                ExtractionField(
+                    claim_id=claim.id,
+                    field_name=f"ocr_error:{doc.filename}",
+                    value=ocr_error,
+                    confidence=None,
+                    page_num=1,
+                    method=ocr_method,
+                    review_required=True,
+                )
+            )
 
     extracted = await extract_entities(combined_text)
+    if not combined_text.strip():
+        extracted.low_confidence_fields.append("no_document_text")
+
     user = claim.user
 
     from app.models import EligibilityLimit, Hospital, HospitalDiscount, Medicine

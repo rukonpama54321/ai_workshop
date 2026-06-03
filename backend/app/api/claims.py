@@ -4,17 +4,51 @@ from pathlib import Path
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
 from sqlalchemy.orm import Session, joinedload
 
 from app.auth import get_current_user, require_roles
 from app.config import settings
 from app.database import get_db
-from app.models import Claim, ClaimDocument, ClaimStatus, User, UserRole
+from app.models import Claim, ClaimDocument, ClaimStatus, Feedback, User, UserRole
 from app.pipeline.processor import process_claim
 from app.schemas import ClaimDetail, ClaimSummary, ReviewAction
 
 router = APIRouter(prefix="/claims", tags=["claims"])
+
+EMPLOYEE_DELETABLE = {
+    ClaimStatus.UPLOADED,
+    ClaimStatus.PROCESSING,
+    ClaimStatus.VALIDATED,
+    ClaimStatus.PENDING_REVIEW,
+    ClaimStatus.PENDING_SIGNOFF,
+    ClaimStatus.REJECTED,
+    ClaimStatus.NEEDS_INFO,
+}
+
+
+def _get_claim_or_404(db: Session, claim_id: UUID) -> Claim:
+    claim = db.query(Claim).filter(Claim.id == claim_id).first()
+    if not claim:
+        raise HTTPException(status_code=404, detail="Claim not found")
+    return claim
+
+
+def _assert_can_delete(claim: Claim, user: User) -> None:
+    if user.role in (UserRole.REVIEWER, UserRole.ADMIN):
+        return
+    if claim.user_id != user.id:
+        raise HTTPException(status_code=403, detail="Not your claim")
+    if claim.status == ClaimStatus.APPROVED:
+        raise HTTPException(status_code=403, detail="Approved claims cannot be deleted")
+    if claim.status not in EMPLOYEE_DELETABLE:
+        raise HTTPException(status_code=403, detail="This claim cannot be deleted")
+
+
+def _remove_claim_files(claim_id: UUID) -> None:
+    claim_dir = Path(settings.upload_dir) / str(claim_id)
+    if claim_dir.exists():
+        shutil.rmtree(claim_dir, ignore_errors=True)
 
 
 def _claim_to_summary(claim: Claim) -> ClaimSummary:
@@ -157,3 +191,19 @@ def review_claim(
         line_items=claim.line_items,
         extraction_fields=claim.extraction_fields,
     )
+
+
+@router.delete("/{claim_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_claim(
+    claim_id: UUID,
+    user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[Session, Depends(get_db)],
+):
+    claim = _get_claim_or_404(db, claim_id)
+    _assert_can_delete(claim, user)
+
+    db.query(Feedback).filter(Feedback.claim_id == claim_id).update({Feedback.claim_id: None})
+    db.delete(claim)
+    db.commit()
+    _remove_claim_files(claim_id)
+    return None

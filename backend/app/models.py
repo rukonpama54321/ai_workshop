@@ -58,7 +58,10 @@ class User(Base):
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
-    claims: Mapped[list["Claim"]] = relationship(back_populates="user")
+    claims: Mapped[list["Claim"]] = relationship(
+        back_populates="user",
+        foreign_keys="Claim.user_id",
+    )
 
 
 class Claim(Base):
@@ -82,6 +85,7 @@ class Claim(Base):
     )
 
     user: Mapped["User"] = relationship(back_populates="claims", foreign_keys=[user_id])
+    reviewer: Mapped["User | None"] = relationship(foreign_keys=[reviewed_by_id])
     documents: Mapped[list["ClaimDocument"]] = relationship(back_populates="claim", cascade="all, delete-orphan")
     line_items: Mapped[list["ClaimLineItem"]] = relationship(back_populates="claim", cascade="all, delete-orphan")
     extraction_fields: Mapped[list["ExtractionField"]] = relationship(

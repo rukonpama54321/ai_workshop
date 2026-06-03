@@ -27,7 +27,14 @@ export async function api<T>(path: string, options: RequestInit = {}): Promise<T
     const err = await res.json().catch(() => ({ detail: res.statusText }));
     throw new Error(err.detail || "Request failed");
   }
+  if (res.status === 204) {
+    return undefined as T;
+  }
   return res.json();
+}
+
+export async function deleteClaim(claimId: string): Promise<void> {
+  await api<void>(`/claims/${claimId}`, { method: "DELETE" });
 }
 
 export async function login(username: string, password: string) {

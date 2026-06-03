@@ -4,40 +4,48 @@ Training implementation: medical bill extraction, claim validation, and in-app c
 
 ## Quick start
 
-### 1. Start database & API (Docker)
+### Option A — use startup scripts (easiest)
 
-```bash
+From project root `E:\AI Workshop 2026`:
+
+```powershell
+# Terminal 1 — ensure Docker Postgres is up first
+docker compose up -d db redis
+
+# Terminal 1 — backend
+.\run-backend.ps1
+
+# Terminal 2 — frontend
+.\run-frontend.ps1
+```
+
+### Option B — manual commands
+
+**Important:** run uvicorn from the `backend` folder, not the project root.
+
+```powershell
 cd "e:\AI Workshop 2026"
 docker compose up -d db redis
 ```
 
-### 2. Backend (local Python)
-
-```bash
-cd backend
-python -m venv .venv
+```powershell
+cd "e:\AI Workshop 2026\backend"
 .venv\Scripts\activate
-pip install -r requirements.txt
-
-set DATABASE_URL=postgresql://medclaim:medclaim@localhost:5432/medclaim
+$env:DATABASE_URL="postgresql://medclaim:medclaim@localhost:5432/medclaim"
 uvicorn app.main:app --reload --port 8000
 ```
 
-Or run full stack in Docker:
-
-```bash
-docker compose up --build
-```
-
-### 3. Frontend
-
-```bash
-cd frontend
+```powershell
+cd "e:\AI Workshop 2026\frontend"
 npm install
 npm run dev
 ```
 
-Open http://localhost:5173
+Open http://127.0.0.1:5173
+
+### Common error
+
+`ModuleNotFoundError: No module named 'app'` — you ran uvicorn from the **project root**. Use `.\run-backend.ps1` or `cd backend` first.
 
 ### 4. Ollama (optional)
 
@@ -48,7 +56,13 @@ LLM_BASE_URL=http://localhost:11434
 LLM_MODEL=llama3.2
 ```
 
-Without Ollama, the app falls back to regex extraction.
+Without Tesseract, image uploads use **EasyOCR** (first run downloads ~100MB models).
+
+```powershell
+pip install -r requirements.txt
+```
+
+Optional faster OCR — install [Tesseract for Windows](https://github.com/UB-Mannheim/tesseract/wiki) and add to PATH.
 
 ## Demo accounts
 

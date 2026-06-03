@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
-import { useParams } from "react-router-dom";
-import { api, ClaimDetail, User } from "../api";
+import { useNavigate, useParams } from "react-router-dom";
+import { api, ClaimDetail, deleteClaim, User } from "../api";
 
 function flagClass(flag: string) {
   if (flag === "ok") return "text-green-700";
@@ -11,10 +11,12 @@ function flagClass(flag: string) {
 
 export default function ClaimDetailPage() {
   const { id } = useParams<{ id: string }>();
+  const navigate = useNavigate();
   const [claim, setClaim] = useState<ClaimDetail | null>(null);
   const [user, setUser] = useState<User | null>(null);
   const [comment, setComment] = useState("");
   const [busy, setBusy] = useState(false);
+  const [deleteError, setDeleteError] = useState("");
 
   useEffect(() => {
     api<User>("/auth/me").then(setUser);
@@ -35,10 +37,29 @@ export default function ClaimDetailPage() {
     }
   }
 
+  async function handleDelete() {
+    if (!id || !claim) return;
+    const label = claim.status.replace(/_/g, " ");
+    if (!window.confirm(`Delete this claim (${label})? This cannot be undone.`)) return;
+    setBusy(true);
+    setDeleteError("");
+    try {
+      await deleteClaim(id);
+      navigate("/");
+    } catch (err) {
+      setDeleteError(err instanceof Error ? err.message : "Failed to delete claim");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   if (!claim) return <p>Loading…</p>;
 
   const isReviewer = user?.role === "reviewer" || user?.role === "admin";
   const canReview = isReviewer && ["pending_review", "pending_signoff"].includes(claim.status);
+  const canDelete =
+    isReviewer ||
+    (user?.role === "employee" && claim.status !== "approved");
 
   return (
     <div className="space-y-6">
@@ -47,7 +68,18 @@ export default function ClaimDetailPage() {
           <h1 className="text-2xl font-bold">Claim calculation</h1>
           <p className="text-sm text-slate-500">Status: {claim.status.replace(/_/g, " ")}</p>
         </div>
+        {canDelete && (
+          <button
+            type="button"
+            disabled={busy}
+            onClick={handleDelete}
+            className="rounded border border-red-300 bg-white px-3 py-1.5 text-sm text-red-700 hover:bg-red-50 disabled:opacity-50"
+          >
+            Delete claim
+          </button>
+        )}
       </div>
+      {deleteError && <p className="text-sm text-red-600">{deleteError}</p>}
 
       {/* Summary panel */}
       <div className="grid gap-4 sm:grid-cols-3">

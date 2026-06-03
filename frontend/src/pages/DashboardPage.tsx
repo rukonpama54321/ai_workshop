@@ -1,6 +1,6 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { api, ClaimSummary } from "../api";
+import { api, ClaimSummary, deleteClaim, User } from "../api";
 
 const statusColor: Record<string, string> = {
   approved: "bg-green-100 text-green-800",
@@ -11,10 +11,37 @@ const statusColor: Record<string, string> = {
 
 export default function DashboardPage() {
   const [claims, setClaims] = useState<ClaimSummary[]>([]);
+  const [user, setUser] = useState<User | null>(null);
 
-  useEffect(() => {
+  const loadClaims = useCallback(() => {
     api<ClaimSummary[]>("/claims").then(setClaims).catch(console.error);
   }, []);
+
+  useEffect(() => {
+    loadClaims();
+    api<User>("/auth/me").then(setUser).catch(console.error);
+  }, [loadClaims]);
+
+  function canDeleteClaim(claim: ClaimSummary): boolean {
+    if (!user) return false;
+    if (user.role === "reviewer" || user.role === "admin") return true;
+    return claim.status !== "approved";
+  }
+
+  async function handleDelete(e: React.MouseEvent, claim: ClaimSummary) {
+    e.preventDefault();
+    if (!canDeleteClaim(claim)) {
+      alert("Approved claims cannot be deleted.");
+      return;
+    }
+    if (!window.confirm("Delete this claim? This cannot be undone.")) return;
+    try {
+      await deleteClaim(claim.id);
+      loadClaims();
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "Failed to delete claim");
+    }
+  }
 
   return (
     <div>
@@ -48,9 +75,18 @@ export default function DashboardPage() {
                   <td className="px-4 py-3 font-medium text-teal-800">₹{c.total_claimable.toLocaleString()}</td>
                   <td className="px-4 py-3 text-red-700">₹{c.total_deductions.toLocaleString()}</td>
                   <td className="px-4 py-3">
-                    <Link to={`/claims/${c.id}`} className="text-teal-700 hover:underline">
+                    <Link to={`/claims/${c.id}`} className="mr-3 text-teal-700 hover:underline">
                       View
                     </Link>
+                    {canDeleteClaim(c) && (
+                      <button
+                        type="button"
+                        onClick={(e) => handleDelete(e, c)}
+                        className="text-red-600 hover:underline"
+                      >
+                        Delete
+                      </button>
+                    )}
                   </td>
                 </tr>
               ))}
